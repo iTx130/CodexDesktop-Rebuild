@@ -244,32 +244,24 @@ function buildWin(platform) {
 // ─── ASAR integrity ─────────────────────────────────────────────
 
 function computeAsarHeaderHash(asarPath) {
-  return execSync(`node -e "
-    const fs=require('fs'),crypto=require('crypto');
-    const buf=fs.readFileSync(process.argv[1]);
-    const sz=buf.readUInt32LE(12);
-    const hdr=buf.slice(16,16+sz);
-    process.stdout.write(crypto.createHash('sha256').update(hdr).digest('hex'));
-  " "${asarPath}"`, { encoding: "utf-8" }).trim();
+  const crypto = require("crypto");
+  const buf = fs.readFileSync(asarPath);
+  const headerSize = buf.readUInt32LE(12);
+  const header = buf.slice(16, 16 + headerSize);
+  return crypto.createHash("sha256").update(header).digest("hex");
 }
 
 function patchExeHash(exePath, oldHash, newHash) {
-  const result = execSync(`node -e "
-    const fs=require('fs');
-    const buf=fs.readFileSync(process.argv[1]);
-    const oldBuf=Buffer.from(process.argv[2],'ascii');
-    const idx=buf.indexOf(oldBuf);
-    if(idx<0){console.log('NOT_FOUND');process.exit(0)}
-    Buffer.from(process.argv[3],'ascii').copy(buf,idx);
-    fs.writeFileSync(process.argv[1],buf);
-    console.log('REPLACED:'+idx);
-  " "${exePath}" "${oldHash}" "${newHash}"`, { encoding: "utf-8" }).trim();
-
-  if (result.startsWith("REPLACED:")) {
-    console.log(`   [integrity] exe hash patched at offset ${result.split(":")[1]}`);
-  } else {
+  const buf = fs.readFileSync(exePath);
+  const oldBuf = Buffer.from(oldHash, "ascii");
+  const idx = buf.indexOf(oldBuf);
+  if (idx < 0) {
     console.log("   [!] old hash not found in exe");
+    return;
   }
+  Buffer.from(newHash, "ascii").copy(buf, idx);
+  fs.writeFileSync(exePath, buf);
+  console.log(`   [integrity] exe hash patched at offset ${idx}`);
 }
 
 function updateAsarIntegrity(asarPath, infoPlistPath) {
